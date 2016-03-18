@@ -97,7 +97,11 @@ update action model =
 
 getSingleDocumentFromList : String -> List (HasId a) -> List (HasId a)
 getSingleDocumentFromList id documents =
-  List.filter (\document -> document.id == id) documents
+  List.filter (idsMatch id) documents
+
+idsMatch : String -> HasId a -> Bool
+idsMatch id document =
+  document.id == id
 
 getDocumentsFromResults : List (HasId a) -> List (String, Float) -> List (HasId a)
 getDocumentsFromResults documents results =
