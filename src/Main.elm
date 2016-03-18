@@ -10,7 +10,13 @@ import BeerCard exposing (..)
 
 
 --Model
-type alias Beer = { id: String, name: String, brewery: String}
+type alias Beer = { id : String
+                  , name : String
+                  , brewery : String
+                  , ibu : Maybe Int
+                  , abv : Maybe Float
+                  , srm : Maybe Int
+                  }
 type alias HasId a = { a | id: String}
 
 type alias Model = { searchText : String
@@ -33,11 +39,17 @@ beers : List Beer
 beers = [ { id = "2"
           , name = "Tom Waits"
           , brewery = "Good Robot Brewing Co"
+          , ibu = Just 55
+          , abv = Nothing
+          , srm = Nothing
           }
         ,
           { id = "4"
           , name = "Tom Waits For No One"
           , brewery = "Good Robot Brewing Co"
+          , ibu = Nothing
+          , abv = Nothing
+          , srm = Nothing
           }
         ]
 
