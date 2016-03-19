@@ -1,7 +1,9 @@
 import Html exposing (..)
 import Html.Events exposing (..)
 import Html.Attributes exposing (..)
+import Dict exposing (..)
 import StartApp.Simple as StartApp
+import Debug exposing (..)
 
 import ElmTextSearch exposing (..)
 
@@ -53,6 +55,15 @@ beers = [ { id = "2"
           }
         ]
 
+beersDict : Dict String Beer
+beersDict =
+  List.foldr
+    (\({id} as doc) dict -> Dict.insert id doc dict)
+    Dict.empty
+    beers
+
+_ = Debug.log "docsDict" beersDict
+
 initialIndex : (ElmTextSearch.Index Beer, List (Int, String))
 initialIndex =
   ElmTextSearch.addDocs
@@ -87,7 +98,7 @@ update action model =
               Ok results ->
                 let
                   newIndex = results |> fst
-                  newResults = getDocumentsFromResults beers (snd results)
+                  newResults = getDocumentsFromResults beersDict (snd results)
                 in
                   { model | searchText = text
                           , searchResults = newResults
@@ -95,17 +106,13 @@ update action model =
                           , errorMessage = "" }
 
 
-getSingleDocumentFromList : String -> List (HasId a) -> List (HasId a)
-getSingleDocumentFromList id documents =
-  List.filter (idsMatch id) documents
-
 idsMatch : String -> HasId a -> Bool
 idsMatch id document =
   document.id == id
 
-getDocumentsFromResults : List (HasId a) -> List (String, Float) -> List (HasId a)
+getDocumentsFromResults : Dict String Beer -> List (String, Float) -> List Beer
 getDocumentsFromResults documents results =
-  List.concat (List.map (\result -> getSingleDocumentFromList (fst result) documents ) results)
+  List.filterMap (\result -> Dict.get (fst result) documents) results
 
 
 --View
