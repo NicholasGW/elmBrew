@@ -5,7 +5,8 @@ import Dict exposing (..)
 import Json.Encode exposing (..)
 import StartApp.Simple as StartApp
 import Debug exposing (..)
-
+import FilterDropdown exposing (..)
+import SearchBar exposing (..)
 import ElmTextSearch exposing (..)
 
 import BeerCard exposing (..)
@@ -21,13 +22,15 @@ type alias Beer = { id : String
                   , srm : Maybe Int
                   }
 
+type alias Filter = Dict String FilterDropdown.Model
+
 type alias HasId a = { a | id: String}
 
-type alias Model = { searchText : String
+type alias Model = { search : SearchBar.Model
                    , index: ElmTextSearch.Index Beer
                    , searchResults: List Beer
                    , errorMessage : String
-                   , breweryFilter: String
+                   , filter: Filter
                    }
 
 createIndex : ElmTextSearch.Index Beer
@@ -56,9 +59,17 @@ beers = [ { id = "2"
           , abv = Nothing
           , srm = Nothing
           }
+        ,
+         { id = "3"
+         , name = "My sweet beer"
+         , brewery = "Sleepy K"
+         , ibu = Nothing
+         , abv = Nothing
+         , srm = Nothing
+         }
         ]
 
-breweries = ["Any", "Test"]
+breweries = ["Any", "Good Robot Brewing Co"]
 
 beersDict : Dict String Beer
 beersDict =
@@ -74,43 +85,59 @@ initialIndex =
     createIndex
 
 
-model = { searchText = ""
+model = { search = SearchBar.init
         , index = (fst initialIndex)
         , searchResults = beers
         , errorMessage = ""
-        , breweryFilter = "Any"
+        , filter = Dict.insert "brewery" (FilterDropdown.init breweries "Any") Dict.empty
         }
-
-
 
 --Update
 
-type Action = Search String | BreweryFilter String
+type Action = Search SearchBar.Action| UpdateFilter String FilterDropdown.Action
 
+update : Action -> Model -> Model
 update action model =
   case action of
-    Search text ->
-      if text == ""
-        then { model | searchText = text, searchResults = beers, errorMessage = ""}
-        else
-          let
-            searchResult = ElmTextSearch.search text model.index
-          in
-            case searchResult of
-              Err error ->
-                { model | searchText = text, searchResults = [], errorMessage = error }
-              Ok results ->
-                let
-                  newIndex = results |> fst
-                  newResults = getDocumentsFromResults beersDict (snd results)
-                in
-                  { model | searchText = text
-                          , searchResults = newResults
-                          , index = newIndex
-                          , errorMessage = "" }
+    Search act ->
+        let
+          newSearchText = (SearchBar.update act) model.search
+        in
+          if newSearchText == ""
+          then { model | search = newSearchText
+                       , searchResults = beers
+                       , errorMessage = ""}
+          else
+            let
+              searchResult = ElmTextSearch.search newSearchText model.index
+            in
+              case searchResult of
+                Err error ->
+                  { model | search = newSearchText
+                          , searchResults = []
+                          , errorMessage = error }
+                Ok results ->
+                  let
+                    newIndex = results |> fst
+                    newResults = getDocumentsFromResults beersDict (snd results)
+                  in
+                    { model | search = newSearchText
+                            , searchResults = newResults
+                            , index = newIndex
+                            , errorMessage = "" }
 
-    BreweryFilter brewery ->
-      { model | breweryFilter = brewery }
+    UpdateFilter field act ->
+      let
+        currentFilter = Dict.get field model.filter
+      in
+        case currentFilter of
+          Nothing ->
+            model
+          Just currentFilter ->
+            let
+              updatedFilter = FilterDropdown.update act currentFilter
+            in
+              { model | filter = Dict.insert field updatedFilter model.filter }
 
 
 idsMatch : String -> HasId a -> Bool
@@ -124,41 +151,25 @@ getDocumentsFromResults documents results =
 
 --View
 
-searchBar : String -> Signal.Address Action -> Html
-searchBar string address =
-  input [ placeholder "Search"
-        , value string
-        , on "input" targetValue (\str -> Signal.message address (Search str))
-        ] []
 
-filterDropdown : List String -> String -> Signal.Address Action -> (String -> Action) -> Html
-filterDropdown values selected address action =
-   select [ on "change" targetValue (\str -> Signal.message address (action str))]
-          (filterDropdownOptions values selected)
+filterAsList : Filter -> List (String, FilterDropdown.Model)
+filterAsList filter = Dict.toList filter
 
-filterDropdownOptions : List String -> String -> List Html
-filterDropdownOptions values selection =
-  List.map (\str -> option [ selected (selection == str)
-                           , value str
-                           , property "label" (Json.Encode.string str)
-                           ] []) values
-
-
-filterByBrewery : String -> Beer -> Bool
-filterByBrewery filter beer =
-  if filter == "Any"
-    then True
-    else filter == beer.brewery
+filterTupleToDropdown : Signal.Address Action -> (String, FilterDropdown.Model) -> Html
+filterTupleToDropdown address (field, filterModel) =
+  FilterDropdown.view (Signal.forwardTo address (UpdateFilter field)) filterModel
 
 view: Signal.Address Action -> Model -> Html
 view address model =
     let
-      filteredBeers = List.filter (filterByBrewery model.breweryFilter) model.searchResults
+      --filteredBeers = List.filter (filterByPredicate model.filterPredicate) model.searchResults
+      filterList = filterAsList model.filter
+      dropdowns = List.map (filterTupleToDropdown address) filterList
     in
-      div [] (  searchBar model.searchText address
+      div [] (  SearchBar.view (Signal.forwardTo address Search) model.search
              :: div [] [(text model.errorMessage)]
-             :: filterDropdown breweries "Any" address BreweryFilter
-             :: List.map BeerCard.view filteredBeers
+             :: dropdowns
+             --:: List.map BeerCard.view filteredBeers
              )
 
 main =
