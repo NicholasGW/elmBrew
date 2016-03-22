@@ -2,6 +2,7 @@ import Html exposing (..)
 import Html.Events exposing (..)
 import Html.Attributes exposing (..)
 import Dict exposing (..)
+import Json.Encode exposing (..)
 import StartApp.Simple as StartApp
 import Debug exposing (..)
 
@@ -19,12 +20,14 @@ type alias Beer = { id : String
                   , abv : Maybe Float
                   , srm : Maybe Int
                   }
+
 type alias HasId a = { a | id: String}
 
 type alias Model = { searchText : String
                    , index: ElmTextSearch.Index Beer
                    , searchResults: List Beer
                    , errorMessage : String
+                   , breweryFilter: String
                    }
 
 createIndex : ElmTextSearch.Index Beer
@@ -55,14 +58,14 @@ beers = [ { id = "2"
           }
         ]
 
+breweries = ["Any", "Test"]
+
 beersDict : Dict String Beer
 beersDict =
   List.foldr
     (\({id} as doc) dict -> Dict.insert id doc dict)
     Dict.empty
     beers
-
-_ = Debug.log "docsDict" beersDict
 
 initialIndex : (ElmTextSearch.Index Beer, List (Int, String))
 initialIndex =
@@ -75,13 +78,14 @@ model = { searchText = ""
         , index = (fst initialIndex)
         , searchResults = beers
         , errorMessage = ""
+        , breweryFilter = "Any"
         }
 
 
 
 --Update
 
-type Action = Search String
+type Action = Search String | BreweryFilter String
 
 update action model =
   case action of
@@ -105,6 +109,9 @@ update action model =
                           , index = newIndex
                           , errorMessage = "" }
 
+    BreweryFilter brewery ->
+      { model | breweryFilter = brewery }
+
 
 idsMatch : String -> HasId a -> Bool
 idsMatch id document =
@@ -124,13 +131,35 @@ searchBar string address =
         , on "input" targetValue (\str -> Signal.message address (Search str))
         ] []
 
+filterDropdown : List String -> String -> Signal.Address Action -> (String -> Action) -> Html
+filterDropdown values selected address action =
+   select [ on "change" targetValue (\str -> Signal.message address (action str))]
+          (filterDropdownOptions values selected)
+
+filterDropdownOptions : List String -> String -> List Html
+filterDropdownOptions values selection =
+  List.map (\str -> option [ selected (selection == str)
+                           , value str
+                           , property "label" (Json.Encode.string str)
+                           ] []) values
+
+
+filterByBrewery : String -> Beer -> Bool
+filterByBrewery filter beer =
+  if filter == "Any"
+    then True
+    else filter == beer.brewery
 
 view: Signal.Address Action -> Model -> Html
 view address model =
-    div [] (  searchBar model.searchText address
-           :: div [] [(text model.errorMessage)]
-           :: List.map BeerCard.view model.searchResults
-           )
+    let
+      filteredBeers = List.filter (filterByBrewery model.breweryFilter) model.searchResults
+    in
+      div [] (  searchBar model.searchText address
+             :: div [] [(text model.errorMessage)]
+             :: filterDropdown breweries "Any" address BreweryFilter
+             :: List.map BeerCard.view filteredBeers
+             )
 
 main =
   StartApp.start({model = model, view = view, update = update})
